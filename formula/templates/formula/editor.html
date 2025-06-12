@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Formula Input</title>
+    <style>
+        .tag {
+            display: inline-block;
+            background: #e0f7fa;
+            padding: 5px 10px;
+            margin: 2px;
+            border-radius: 4px;
+            position: relative;
+        }
+        .dropdown-btn {
+            margin-left: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: white;
+            border: 1px solid gray;
+            padding: 5px;
+            z-index: 99;
+        }
+        .tag:hover .dropdown {
+            display: block;
+        }
+        .suggestions {
+            border: 1px solid #ccc;
+            background: white;
+            position: absolute;
+            z-index: 999;
+        }
+        .suggestion-item {
+            padding: 5px;
+            cursor: pointer;
+        }
+        .suggestion-item:hover {
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <h2>Formula Editor</h2>
+    <div contenteditable="true" id="editor" style="border:1px solid black; padding:10px; width:500px; min-height:50px;"></div>
+    <div id="suggestion-box" class="suggestions"></div>
+
+    <script>
+        const editor = document.getElementById("editor");
+        const suggestionBox = document.getElementById("suggestion-box");
+
+        editor.addEventListener("keyup", async (e) => {
+            const lastChar = editor.innerText.slice(-1);
+            if (e.key === "Backspace") {
+                const lastChild = editor.lastChild;
+                if (lastChild && lastChild.classList && lastChild.classList.contains("tag")) {
+                    lastChild.remove();
+                }
+                suggestionBox.style.display = "none";
+                return;
+            }
+
+            const text = editor.innerText.trim().split(/[\s\+\-\*\/\^\(\)]+/).pop();
+
+            // skip empty or number-only input
+            if (!text || !isNaN(text)) {
+                suggestionBox.style.display = "none";
+                return;
+            }
+
+            const res = await fetch(`/api/suggestions/?q=${text}`);
+            const suggestions = await res.json();
+
+            if (suggestions.length === 0) {
+                suggestionBox.style.display = "none";
+                return;
+            }
+
+            suggestionBox.innerHTML = "";
+            suggestions.forEach(item => {
+                const div = document.createElement("div");
+                div.classList.add("suggestion-item");
+                div.textContent = item.label;
+                div.onclick = () => {
+                    const parts = editor.innerHTML.trim().split(" ");
+                    parts.pop();
+                    parts.push(`
+                        <span class="tag">
+                            ${item.label}
+                            <span class="dropdown-btn">⋮</span>
+                            <div class="dropdown">
+                                <div>Edit</div>
+                                <div>Remove</div>
+                            </div>
+                        </span>`);
+                    editor.innerHTML = parts.join(" ") + "&nbsp;";
+                    suggestionBox.style.display = "none";
+                    placeCursorAtEnd(editor);
+                };
+                suggestionBox.appendChild(div);
+            });
+
+            const rect = editor.getBoundingClientRect();
+            suggestionBox.style.left = rect.left + "px";
+            suggestionBox.style.top = rect.bottom + "px";
+            suggestionBox.style.display = "block";
+        });
+
+        function placeCursorAtEnd(el) {
+            const range = document.createRange();
+            const sel = window.getSelection();
+            range.selectNodeContents(el);
+            range.collapse(false);
+            sel.removeAllRanges();
+            sel.addRange(range);
+        }
+    </script>
+</body>
+</html>
